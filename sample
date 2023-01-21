@@ -1,0 +1,78 @@
+#!/usr/bin/sh
+
+#####removing temporary files
+rm -rf  File*.tmp 2>/dev/null
+rm -rf diff.txt  2>/dev/null
+rm -rf job_linenumbers.txt  2>/dev/null
+rm -rf inputFile.tmp 2>/dev/null
+rm -rf tmpfile 2>/dev/null
+
+#########removing header information from input file and storing it in tmp file for extraction
+cat inputFile.txt |tail -n+9 > inputFile.tmp 
+
+
+
+####storing linumbers where job string is found
+cat inputFile.tmp | grep -i -n job|cut -f1 -d: > job_linenumbers.txt
+
+i=`cat job_linenumbers.txt|head -1`
+
+#### calcuating the number of lines between two jobs in inputfile, Assumption is that there is an empty line between two job logs
+for each_entry in `cat job_linenumbers.txt |tail -n+2` 
+do
+	diff=`expr $each_entry - $i`
+        diff=`expr $diff - 1` 
+       	echo "$i:${diff}"  >> diff.txt
+	i=$each_entry
+done
+
+#######calucating the number of lines of the last job in inputfile
+lastjob_line=`cat job_linenumbers.txt|tail -1`
+total_lines=`cat inputFile.tmp|wc -l`
+total_lines_input=`expr $total_lines + 1`
+final_job=`expr $total_lines_input - $lastjob_line`
+
+
+echo "$lastjob_line:${final_job}" >> diff.txt
+
+
+###### The information for each job is stored in separate tempfile(extracted from inputfile based on number of lines calculated above), required data is extracted and stored to outputfile
+file=1
+for each_entry in `cat diff.txt`
+do
+ 	from=`echo $each_entry | awk -F':' '{print $1}'`	
+	lines=`echo $each_entry | awk -F':' '{print $2}'`
+
+	cat inputFile.tmp|tail -n+$from | head -n$lines > File$file.tmp
+	file=`expr $file + 1`
+done	
+
+echo "Job|Job Description	|Execution Date	   |SeqNo. 	 |Session |Description|Runtime Error|Information   |Execution Date | Termination Date  |Comp">output.txt
+for each_file in `ls File*.tmp`
+do
+	job=`cat $each_file |head -1|awk -F' ' '{print $3}'`
+    job_description=`cat $each_file|head -1|awk -F' ' '{ $1=""; $2="";$3=""; print}'| awk '{$1=$1;print}'`
+	exedate=`cat $each_file|head -2|tail -1| awk -F' ' '{print $4" "$5}'` 
+
+	cat $each_file |tail -n+3>tmpfile
+	while read each_line
+	do
+	seqno=`echo "${each_line}"|awk -F'|' '{print $1}'| awk '{$1=$1;print}'`
+	session=`echo "${each_line}"|awk -F'|' '{print $2}'| awk '{$1=$1;print}'`	
+	description=`echo "${each_line}"|awk -F'|' '{print $3}'| awk '{$1=$1;print}'`
+	Runtimeerror=`echo "${each_line}"|awk -F'|' '{print $4}'| awk '{$1=$1;print}'`	
+	Information=`echo "${each_line}"|awk -F'|' '{print $5}'| awk '{$1=$1;print}'`	
+	Executiondate=`echo "${each_line}"|awk -F'|' '{print $6}'| awk '{$1=$1;print}'`
+	Terminationdate=`echo "${each_line}"|awk -F'|' '{print $7}'| awk '{$1=$1;print}'`
+	Comp=`echo "${each_line}"|awk -F'|' '{print $8}'| awk '{$1=$1;print}'`
+	echo "$job|$job_description|$exedate|$seqno|$session|$description|$Runtimeerror|$Information|$Executiondate|$Terminationdate|$Comp">>output.txt
+		
+	done< tmpfile
+done
+
+#####removing temporary files
+rm -rf  File*.tmp 2>/dev/null
+rm -rf diff.txt  2>/dev/null
+rm -rf job_linenumbers.txt  2>/dev/null
+rm -rf inputFile.tmp 2>/dev/null
+rm -rf tmpfile 2>/dev/null
